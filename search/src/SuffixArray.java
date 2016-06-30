@@ -1,14 +1,10 @@
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.sql.*;
 import java.util.*;
 import java.util.function.Function;
 import java.util.function.ToDoubleFunction;
 import java.util.function.ToIntFunction;
 import java.util.function.ToLongFunction;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * Created by jmcghee on 6/28/16.
@@ -20,6 +16,7 @@ public class SuffixArray {
     private char[] text;
     private int length;
     private Integer[] lcps;
+    private static final String filesToSearch = "/Users/jmcghee/workspace/git/fundamentals/search/filesToSearch/";
 
     public SuffixArray (String original) {
         this.original = original + "$";
@@ -29,7 +26,7 @@ public class SuffixArray {
         for (int i = 0; i < this.length; i++) {
             this.suffixes[i] = i;
         }
-        SedgewickRadix.sort(this);
+        SedgewickQuick.sort(this);
         this.lcps = new Integer[this.length];
         for (int i = 0; i < this.length; i++) {
             this.lcps[i] = this.lcp(i, i - 1);
@@ -43,35 +40,22 @@ public class SuffixArray {
         this.length = original.length();
     }
 
-    public static ArrayList<String> buildSuffixes (String raw) {
-        int length = raw.length();
-        ArrayList<String> suffixes = new ArrayList<>();
-        for (int i = 0; i < length; i++) {
-            suffixes.add(raw.substring(i));
-        }
-        return suffixes;
-    }
-
-    public void rebuildLcps() {
-        Integer[] lcps = new Integer[this.length];
-        for (int i = 1; i < this.length; i++) {
-            lcps[i] = this.lcp(i, i - 1);
-        }
-        this.lcps = lcps;
-    }
-
     public int length () {
         return this.length;
+    }
+
+    public int getIndex(int i) {
+        if (i < 0 || i >= this.length) throw new IndexOutOfBoundsException();
+        return this.suffixes[i];
+    }
+
+    public String getText() {
+        return this.original;
     }
 
     public String get (int i) throws IndexOutOfBoundsException {
         if (i < 0 || i >= this.length) throw new IndexOutOfBoundsException();
         return this.original.substring(this.suffixes[i]);
-    }
-
-    public String select(int i) throws IndexOutOfBoundsException {
-        if (i < 0 || i >= this.length) throw new IndexOutOfBoundsException();
-        return this.get(i).substring(this.length - i);
     }
 
     public String select(int i, int j) throws IndexOutOfBoundsException {
@@ -117,51 +101,6 @@ public class SuffixArray {
         return low;
     }
 
-    static class StringLengthComparator implements Comparator<String> {
-        public int compare (String a, String b) {
-            return -(a.length() - b.length());
-        }
-    }
-
-    public String longestRepeatedSubstring (String tableName) throws ClassNotFoundException, SQLException {
-        String url = "jdbc:sqlite:identifier.db";
-        Class.forName("org.sqlite.JDBC");
-        Connection c = null;
-        Statement statement = null;
-        c = DriverManager.getConnection(url);
-        statement = c.createStatement();
-
-        ResultSet rs = statement.executeQuery( "SELECT SUFFIX, MAX(LCP) FROM " + tableName + ";" );
-        int maxIndex = 0;
-        int lcp = 0;
-        while ( rs.next() ) {
-            maxIndex = rs.getInt("SUFFIX");
-            lcp = rs.getInt("MAX(LCP)");
-        }
-        return this.original.substring(maxIndex, maxIndex + lcp);
-    }
-
-    public ArrayList<String> longestRepeatedSubstrings (String tableName, int number) throws ClassNotFoundException, SQLException {
-        ArrayList<String> substrings = new ArrayList<String>();
-        String url = "jdbc:sqlite:identifier.db";
-        Class.forName("org.sqlite.JDBC");
-        Connection c = null;
-        Statement statement = null;
-        c = DriverManager.getConnection(url);
-        statement = c.createStatement();
-
-        String query = "SELECT SUFFIX, LCP FROM " + tableName + " ORDER BY LCP DESC LIMIT " + number + ";";
-        ResultSet rs = statement.executeQuery( query );
-        int maxIndex;
-        int lcp;
-        while ( rs.next() ) {
-            maxIndex = rs.getInt("SUFFIX");
-            lcp = rs.getInt("LCP");
-            substrings.add(this.original.substring(maxIndex, maxIndex + lcp));
-        }
-        return substrings;
-    }
-
     public int[] find (String pattern) {
         int start = rank(pattern);
         char last = pattern.charAt(pattern.length() - 1);
@@ -172,7 +111,7 @@ public class SuffixArray {
     }
 
     public ArrayList<String> complete(String query) {
-        return complete(query, 1, 0);
+        return complete(query, 1);
     }
 
     public ArrayList<String> complete(String query, int max) {
@@ -202,180 +141,38 @@ public class SuffixArray {
         return completions;
     }
 
-    public static void drop(String name) throws IOException, SQLException, ClassNotFoundException {
-        String url = "jdbc:sqlite:identifier.db";
-        Class.forName("org.sqlite.JDBC");
-        Connection c = null;
-        Statement statement = null;
-        c = DriverManager.getConnection(url);
-        statement = c.createStatement();
-
-        String sql = "DROP TABLE " + name;
-        try {
-            statement.executeUpdate(sql);
-        } catch (SQLException e) {}
-        statement.close();
-        c.close();
-    }
-
-    public void store(String name) throws IOException, SQLException, ClassNotFoundException {
-        String url = "jdbc:sqlite:identifier.db";
-        Class.forName("org.sqlite.JDBC");
-        Connection c = null;
-        Statement statement = null;
-        c = DriverManager.getConnection(url);
-        statement = c.createStatement();
-
-        String sql = "CREATE TABLE " + name +
-                     " (ID INT PRIMARY KEY     NOT NULL," +
-                     " SUFFIX          INT     NOT NULL," +
-                     " LCP             INT     NOT NULL)";
-
-        String sqlText = "CREATE TABLE " + name + "_TEXT" +
-                " (ID INT PRIMARY KEY     NOT NULL," +
-                " FULL            TEXT    NOT NULL)";
-        try {
-            statement.executeUpdate(sql);
-            statement.executeUpdate(sqlText);
-        } catch (SQLException e) {
-            System.out.println(e);
-        }
-
-        for (int i = 0; i < this.suffixes.length; i++) {
-            sql = "INSERT INTO " + name + " (ID, SUFFIX, LCP) " +
-                    "VALUES (" + i + ", " + this.suffixes[i] + ", " + this.lcps[i] + ");";
-            try {
-                statement.executeUpdate(sql);
-            } catch (SQLException e) {
-                e.printStackTrace();
-            }
-        }
-
-        sql = "INSERT INTO " + name + "_TEXT (ID, FULL) " +
-                "VALUES (1, '" + this.original.replaceAll("'", "''") + "');";
-        statement.executeUpdate(sql);
-
-        statement.close();
-        c.close();
-    }
-
-    public static SuffixArray read(String name) throws IOException, SQLException, ClassNotFoundException {
-        String url = "jdbc:sqlite:identifier.db";
-        Class.forName("org.sqlite.JDBC");
-        Connection c = null;
-        Statement statement = null;
-        c = DriverManager.getConnection(url);
-        statement = c.createStatement();
-
-        ResultSet rs = statement.executeQuery( "SELECT SUFFIX, LCP FROM " + name + ";" );
-
-        ArrayList<Integer> indices = new ArrayList<>();
-        ArrayList<Integer> lcps = new ArrayList<>();
-        while ( rs.next() ) {
-            indices.add(rs.getInt(1));
-            lcps.add(rs.getInt(2));
-        }
-
-        Integer[] _lcps = new Integer[lcps.size()];
-        lcps.toArray(_lcps);
-
-        Integer[] _indices = new Integer[indices.size()];
-        lcps.toArray(_indices);
-
-        ResultSet rsText = statement.executeQuery( "SELECT \"FULL\" FROM " + name + "_TEXT;" );
-
-        String original = "";
-        while (rsText.next()) original = rsText.getString(1);
-        SuffixArray s = new SuffixArray(original, _indices, _lcps);
-
-        statement.close();
-        c.close();
-        return s;
-    }
-
-    public static SuffixArray buildFromFile (String fileName, String table) {
-        StringBuilder fullText = new StringBuilder();
-
-        try (Stream<String> stream = Files.lines(Paths.get(fileName))) {
-            for (String line : stream.collect(Collectors.toList())) {
-                fullText.append(line + " ");
-            }
-        } catch (IOException e) {}
-        SuffixArray sarray = new SuffixArray(new String(fullText));
-
-        try {
-            sarray.store(table);
-        } catch (SQLException | IOException | ClassNotFoundException e) {
-            System.out.println(e);
-            System.exit(1);
-        }
-        return sarray;
-    }
-
-    public static SuffixArray buildFromDB (String name) throws IOException, SQLException, ClassNotFoundException {
-        return read(name);
-    }
-
-    public static SuffixArray loremIpsum () {
-        String fileName = "/Users/jmcghee/workspace/git/fundamentals/search/filesToSearch/LoremIpsum";
-        String tableName = "LOREM";
+    public static SuffixArray build (String file, String tableName) {
+        String fileName = SuffixArray.filesToSearch + file;
         SuffixArray indexed;
         try {
-            indexed = buildFromDB(tableName);
+            indexed = SuffixArrayDAO.read(tableName);
         } catch (SQLException | IOException | ClassNotFoundException e) {
             System.out.println(e);
-            indexed = SuffixArray.buildFromFile(fileName, tableName);
-        }
-        return indexed;
-    }
-
-    public static SuffixArray taleOfTwoCities () {
-        String fileName = "/Users/jmcghee/workspace/git/fundamentals/search/filesToSearch/TaleOfTwoCities";
-        String tableName = "TWOCITIESSHORT";
-        SuffixArray indexed;
-        try {
-            indexed = buildFromDB(tableName);
-        } catch (SQLException | IOException | ClassNotFoundException e) {
-            System.out.println(e);
-            indexed = SuffixArray.buildFromFile(fileName, tableName);
-        }
-        return indexed;
-    }
-
-    // Going to have to improve sorting time if I want to use this...
-    public static SuffixArray warAndPeace () {
-        String fileName = "/Users/jmcghee/workspace/git/fundamentals/search/filesToSearch/warAndPeace";
-        SuffixArray indexed;
-        String tableName = "WARPEACE";
-        try {
-            drop(tableName);
-            indexed = buildFromDB(tableName);
-        } catch (SQLException | IOException | ClassNotFoundException e) {
-            System.out.println(e);
-            indexed = SuffixArray.buildFromFile(fileName, tableName);
+            indexed = SuffixArrayDAO.buildFromFile(fileName, tableName);
         }
         return indexed;
     }
 
     public static void main (String[] args) {
 
-        SuffixArray sarray = taleOfTwoCities();
+        String tableName = "TWOCITIESSHORT";
+        SuffixArray sarray = build("TaleOfTwoCities", tableName);
         try {
-            ArrayList<String> longestHundred = sarray.longestRepeatedSubstrings("TWOCITIESSHORT", 10000);
-            longestHundred.forEach(System.out::println);
-        } catch (SQLException|ClassNotFoundException e) {
-            System.out.println(e);
+            ArrayList<String> longest10k = SuffixArrayDAO.longestRepeatedSubstrings(tableName, 10000, sarray.getText());
+            longest10k.forEach(System.out::println);
+        } catch (SQLException|ClassNotFoundException|IOException e) {
+            e.printStackTrace();
         }
 
     }
 
     // 3-way string quicksort from Algorithms 4th
-    static class SedgewickRadix {
+    static class SedgewickQuick {
 
         private static SuffixArray s;
 
         public static void sort(SuffixArray s) {
-            SedgewickRadix.s = s;
+            SedgewickQuick.s = s;
             sort(0, s.length()-1, 0);
         }
 
@@ -479,6 +276,11 @@ public class SuffixArray {
         }
     }
 
+    static class StringLengthComparator implements Comparator<String> {
+        public int compare (String a, String b) {
+            return -(a.length() - b.length());
+        }
+    }
 }
 
 
