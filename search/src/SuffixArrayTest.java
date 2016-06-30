@@ -14,8 +14,13 @@ public class SuffixArrayTest {
 
     @Before
     public void initialize () {
-        String test = "blahblah$";
+        String test = "blahblah";
         sarray = new SuffixArray(test);
+    }
+
+    @Test
+    public void testGet() throws Exception {
+        assertEquals("blah$", sarray.get(3));
     }
 
     @Test
@@ -42,23 +47,10 @@ public class SuffixArrayTest {
     }
 
     @Test
-    public void testLongestRepeatedSubstring() throws Exception {
-        assertEquals("blah", sarray.longestRepeatedSubstring());
-    }
-
-    @Test
-    public void testInsert() throws Exception {
-        String test = "sticky$";
-        SuffixArray testSuffixArray = new SuffixArray(test);
-        testSuffixArray.insert("fantastic$");
-        assertEquals("stic", testSuffixArray.longestRepeatedSubstring());
-    }
-
-    @Test
     public void testComplete() throws Exception {
-        String test = "fantastic$";
+        String test = "fantastic";
         SuffixArray testSuffixArray = new SuffixArray(test);
-        String match = testSuffixArray.complete("fanta");
+        String match = testSuffixArray.complete("fanta").get(0);
         assertEquals("fantastic$", match);
     }
 }
